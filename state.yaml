@@ -1,0 +1,22 @@
+project: NMG
+phase: setup
+status: ready
+
+client:
+  name: NMG
+  industry: mining
+  country: Australia
+  purpose: policy_documentation
+
+env:
+  venv: C:\claude\NMG\venv
+  pandoc: C:\Users\nn171\AppData\Local\Pandoc\pandoc.exe
+  packages: [python-docx, pymupdf, pypandoc, markdown]
+
+context:
+  active_task: null
+  last_input: null
+  last_output: null
+
+reference_models: []
+tasks: []
