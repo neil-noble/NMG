@@ -27,6 +27,9 @@ jobs:
         run: pip install requests
 
       - name: Run daily export
+        env:
+          SMARTFILL_CLIENT_REF: ${{ secrets.SMARTFILL_CLIENT_REF }}
+          SMARTFILL_CLIENT_SECRET: ${{ secrets.SMARTFILL_CLIENT_SECRET }}
         run: python daily_export_github.py
 
       - name: Commit and push CSV

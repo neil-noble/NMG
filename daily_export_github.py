@@ -10,9 +10,11 @@ import os
 from datetime import datetime
 from collections import defaultdict
 
+import os
+
 API_URL = "https://www.fmtdata.com/API/api.php"
-CLIENT_REF = "NewMurch5056"
-CLIENT_SECRET = "4a1e8ebdf02ab893"
+CLIENT_REF = os.environ.get("SMARTFILL_CLIENT_REF", "")
+CLIENT_SECRET = os.environ.get("SMARTFILL_CLIENT_SECRET", "")
 
 CSV_PATH = "fuel_data.csv"
 
