@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 st.title("NMG — Crown Prince Gold Mine — Fuel Dashboard")
-st.markdown("*Created by Neil Noble. NMG HSE Consultant. Emergency Services Australia.*")
+st.markdown("Created by Neil Noble. NMG HSE Consultant. Emergency Services Australia.")
 st.caption(f"Last refreshed: {datetime.now().strftime('%d %b %Y %H:%M')}")
 
 # ── Fetch data ────────────────────────────────────────────────────────────────
