@@ -1,0 +1,35 @@
+name: Daily Fuel Export
+
+on:
+  schedule:
+    - cron: '0 21 * * *'  # 7am AWST (UTC+8) = 21:00 UTC previous day
+  workflow_dispatch:       # Allow manual trigger from GitHub
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run daily export
+        run: python daily_export_github.py
+
+      - name: Commit and push CSV
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add fuel_data.csv
+          git diff --staged --quiet || git commit -m "Daily fuel export $(date +'%d/%m/%Y')"
+          git push
