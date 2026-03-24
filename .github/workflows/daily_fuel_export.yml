@@ -32,10 +32,10 @@ jobs:
           SMARTFILL_CLIENT_SECRET: ${{ secrets.SMARTFILL_CLIENT_SECRET }}
         run: python daily_export_github.py
 
-      - name: Commit and push CSV
+      - name: Commit and push CSV files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add fuel_data.csv
+          git add data/
           git diff --staged --quiet || git commit -m "Daily fuel export $(date +'%d/%m/%Y')"
           git push
