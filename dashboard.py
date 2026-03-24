@@ -5,12 +5,12 @@ from datetime import datetime, timedelta
 import api
 
 st.set_page_config(
-    page_title="Crown Prince Gold Mine — Fuel Dashboard",
+    page_title="NMG — Crown Prince Gold Mine — Fuel Dashboard",
     page_icon="⛽",
     layout="wide",
 )
 
-st.title("Crown Prince Gold Mine — Fuel Dashboard")
+st.title("NMG — Crown Prince Gold Mine — Fuel Dashboard")
 st.markdown("*Created by Neil Noble. NMG HSE Consultant. Emergency Services Australia.*")
 st.caption(f"Last refreshed: {datetime.now().strftime('%d %b %Y %H:%M')}")
 
