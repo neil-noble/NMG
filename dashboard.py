@@ -24,56 +24,6 @@ with st.spinner("Loading data..."):
         st.error(f"API error: {e}")
         st.stop()
 
-# ── Write CSV for Excel Power Query ───────────────────────────────────────────
-import os, csv
-
-CSV_PATH = r"P:\GardenGully\Crown Prince Operations\02_Engineering\03_Production\11_Daily Report\fuel_data.csv"
-
-def write_csv(tanks, dips):
-    daily = calc_daily_consumption(dips)
-    today_str = datetime.now().strftime("%d/%m/%Y")
-    rows = []
-    for tank in tanks:
-        name = tank["Description"]
-        vol = float(tank["Volume"])
-        pct = float(tank["Volume Percent"])
-        cap = float(tank["Capacity"])
-        status = tank["Status"]
-        updated = tank["Last Updated"]
-        tank_key = name.strip()[-1] if name.strip()[-1].isdigit() else ""
-        tank_label = f"Tank {tank_key}"
-        today_usage = 0
-        if not daily.empty:
-            today_date = datetime.now().date()
-            mask = (daily["Tank"] == tank_label) & (pd.to_datetime(daily["Date"]).dt.date == today_date)
-            if mask.any():
-                today_usage = daily.loc[mask, "Consumed (L)"].values[0]
-        rows.append({
-            "Date": today_str,
-            "Tank": name,
-            "Volume (L)": vol,
-            "Volume %": pct,
-            "Capacity (L)": cap,
-            "Status": status,
-            "Last Updated": updated,
-            "Today Usage (L)": today_usage,
-        })
-
-    file_exists = os.path.isfile(CSV_PATH)
-    with open(CSV_PATH, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
-        if not file_exists:
-            writer.writeheader()
-        # Only append if today's date not already written
-        if file_exists:
-            with open(CSV_PATH, "r") as rf:
-                existing = rf.read()
-            if today_str in existing:
-                return
-        writer.writerows(rows)
-
-write_csv(tanks, dips)
-
 # ── Current tank levels ───────────────────────────────────────────────────────
 st.subheader("Current Tank Levels")
 
