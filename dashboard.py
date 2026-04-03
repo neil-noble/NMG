@@ -27,45 +27,51 @@ with st.spinner("Loading data..."):
 # ── Current tank levels ───────────────────────────────────────────────────────
 st.subheader("Current Tank Levels")
 
-total_vol = sum(float(t["Volume"]) for t in tanks)
-total_cap = sum(float(t["Capacity"]) for t in tanks)
-total_pct = (total_vol / total_cap * 100) if total_cap > 0 else 0
+TANK_COLOURS = {"1": "#083045", "2": "#B19045"}
 
-if total_pct < 20:
-    colour = "#e74c3c"
-elif total_pct < 40:
-    colour = "#f39c12"
-else:
-    colour = "#27ae60"
+cols = st.columns(len(tanks))
+for col, tank in zip(cols, tanks):
+    vol = float(tank["Volume"])
+    pct = float(tank["Volume Percent"])
+    cap = float(tank["Capacity"])
+    status = tank["Status"]
+    name = tank["Description"]
+    updated = tank["Last Updated"]
 
-fig = go.Figure(go.Indicator(
-    mode="gauge+number+delta",
-    value=total_vol,
-    number={"suffix": " L", "valueformat": ",.0f"},
-    delta={"reference": total_cap, "valueformat": ",.0f", "suffix": " L"},
-    title={"text": "Combined Tank Level", "font": {"size": 14}},
-    gauge={
-        "axis": {"range": [0, total_cap], "tickformat": ",.0f"},
-        "bar": {"color": colour},
-        "steps": [
-            {"range": [0, total_cap * 0.2], "color": "#fadbd8"},
-            {"range": [total_cap * 0.2, total_cap * 0.4], "color": "#fdebd0"},
-            {"range": [total_cap * 0.4, total_cap], "color": "#d5f5e3"},
-        ],
-        "threshold": {
-            "line": {"color": "red", "width": 2},
-            "thickness": 0.75,
-            "value": total_cap * 0.2,
+    if pct < 20:
+        colour = "#e74c3c"  # red
+    elif pct < 40:
+        colour = "#f39c12"  # amber
+    else:
+        colour = "#27ae60"  # green
+
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=vol,
+        number={"suffix": " L", "valueformat": ",.0f"},
+        delta={"reference": cap, "valueformat": ",.0f", "suffix": " L"},
+        title={"text": name, "font": {"size": 14}},
+        gauge={
+            "axis": {"range": [0, cap], "tickformat": ",.0f"},
+            "bar": {"color": colour},
+            "steps": [
+                {"range": [0, cap * 0.2], "color": "#fadbd8"},
+                {"range": [cap * 0.2, cap * 0.4], "color": "#fdebd0"},
+                {"range": [cap * 0.4, cap], "color": "#d5f5e3"},
+            ],
+            "threshold": {
+                "line": {"color": "red", "width": 2},
+                "thickness": 0.75,
+                "value": cap * 0.2,
+            },
         },
-    },
-))
-fig.update_layout(height=280, margin=dict(t=40, b=10, l=20, r=20))
+    ))
+    fig.update_layout(height=280, margin=dict(t=40, b=10, l=20, r=20))
 
-col_gauge, col_spacer = st.columns([1, 2])
-with col_gauge:
-    st.plotly_chart(fig, use_container_width=True)
-    st.metric("Total Volume", f"{total_vol:,.0f} L", f"{total_pct:.1f}% full")
-    st.caption(f"Capacity: {total_cap:,.0f} L across {len(tanks)} tanks")
+    with col:
+        st.plotly_chart(fig, use_container_width=True)
+        st.metric("Volume", f"{vol:,.0f} L", f"{pct:.1f}% full")
+        st.caption(f"Status: **{status}** | Updated: {updated}")
 
 st.divider()
 
@@ -114,18 +120,19 @@ else:
     daily_df["Date"] = pd.to_datetime(daily_df["Date"])
     daily_df["Date_str"] = daily_df["Date"].dt.strftime("%a %d %b")
 
-    tank1_daily = daily_df[daily_df["Tank"] == "Tank 1"].sort_values("Date")
+    tank_names = sorted(daily_df["Tank"].unique())
 
-    combined_df = daily_df.groupby(["Date", "Date_str"], as_index=False)["Consumed (L)"].sum().sort_values("Date")
+    tank1_daily = daily_df[daily_df["Tank"] == "Tank 1"].sort_values("Date")
 
     fig_t = go.Figure(go.Bar(
         x=tank1_daily["Date_str"],
         y=tank1_daily["Consumed (L)"],
-        marker_color="#083045",
+        marker_color=TANK_COLOURS.get("1", "#083045"),
         text=tank1_daily["Consumed (L)"].apply(lambda v: f"{v:,.0f} L"),
         textposition="outside",
     ))
     fig_t.update_layout(
+        title={"text": "Tank 1", "font": {"color": TANK_COLOURS.get("1", "#083045")}},
         yaxis_title="Litres",
         height=360,
         margin=dict(t=40, b=20, l=20, r=20),
@@ -157,34 +164,62 @@ else:
     sunday = today + timedelta(days=days_to_sunday)
     days_remaining = days_to_sunday
 
-    # Average daily combined consumption (only days with actual consumption)
-    combined_data = combined_df["Consumed (L)"]
-    avg_combined = combined_data[combined_data > 0].mean() if (combined_data > 0).any() else 0
+    # Average daily consumption per tank (only days with actual consumption)
+    tank_avgs = {}
+    for tank_name in tank_names:
+        t_data = daily_df[daily_df["Tank"] == tank_name]["Consumed (L)"]
+        tank_avgs[tank_name] = t_data[t_data > 0].mean() if (t_data > 0).any() else 0
 
-    projected = max(total_vol - avg_combined * days_remaining, 0)
-    proj_pct = (projected / total_cap * 100) if total_cap > 0 else 0
-    days_until_empty = total_vol / avg_combined if avg_combined > 0 else float("inf")
+    forecast_rows = []
+    for tank in tanks:
+        name = tank["Description"]
+        vol = float(tank["Volume"])
+        cap = float(tank["Capacity"])
+        pct_now = float(tank["Volume Percent"])
 
-    forecast_df = pd.DataFrame([{
-        "Current (L)": f"{total_vol:,.0f}",
-        "Current %": f"{total_pct:.1f}%",
-        "Avg Daily Usage (L)": f"{avg_combined:,.0f}",
-        "Forecast EOW (L)": f"{projected:,.0f}",
-        "Forecast EOW %": f"{proj_pct:.1f}%",
-        "Days until empty": f"{days_until_empty:.1f}" if days_until_empty != float("inf") else "N/A",
-    }])
+        tank_num = tank_names[tanks.index(tank) % len(tank_names)]
 
-    st.dataframe(forecast_df, use_container_width=True, hide_index=True)
+        avg = tank_avgs.get(tank_num, 0)
+        projected = max(vol - avg * days_remaining, 0)
+        proj_pct = (projected / cap) * 100
+        days_until_empty = vol / avg if avg > 0 else float("inf")
+
+        forecast_rows.append({
+            "Tank": name,
+            "Current (L)": f"{vol:,.0f}",
+            "Current %": f"{pct_now:.1f}%",
+            "Avg Daily Usage (L)": f"{avg:,.0f}",
+            "Forecast EOW (L)": f"{projected:,.0f}",
+            "Forecast EOW %": f"{proj_pct:.1f}%",
+            "Days until empty": f"{days_until_empty:.1f}" if days_until_empty != float("inf") else "N/A",
+            "_proj_pct": proj_pct,
+            "_tank_num": tank_num,
+        })
+
+    forecast_df = pd.DataFrame(forecast_rows)
+
+    def colour_row(row):
+        # _tank_num is e.g. "Tank 1" — extract the digit to look up TANK_COLOURS
+        key = row["_tank_num"].strip()[-1] if row["_tank_num"].strip()[-1].isdigit() else ""
+        base = TANK_COLOURS.get(key, "")
+        return [f"background-color: {base}"] * len(row) if base else [""] * len(row)
+
+    st.dataframe(
+        forecast_df.style.apply(colour_row, axis=1).hide(subset=["_proj_pct", "_tank_num"], axis="columns"),
+        use_container_width=True,
+        hide_index=True,
+    )
 
     st.caption(
-        f"Forecast based on combined avg daily consumption (days with usage only). "
+        f"Forecast based on per-tank avg daily consumption (days with usage only). "
         f"End of week = Sunday **{sunday.strftime('%d %b %Y')}** ({days_remaining} day(s) remaining)."
     )
 
-    if proj_pct < 20:
-        st.warning(f"Combined tanks projected to be below 20% by end of week ({proj_pct:.1f}%). Consider ordering fuel.")
-    elif proj_pct < 40:
-        st.info(f"Combined tanks projected to be at {proj_pct:.1f}% by end of week.")
+    for row in forecast_rows:
+        if row["_proj_pct"] < 20:
+            st.warning(f"⚠️ {row['Tank']} projected to be below 20% by end of week ({row['Forecast EOW %']}). Consider ordering fuel.")
+        elif row["_proj_pct"] < 40:
+            st.info(f"ℹ️ {row['Tank']} projected to be at {row['Forecast EOW %']} by end of week.")
 
 st.divider()
 
