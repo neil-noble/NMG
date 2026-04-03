@@ -27,51 +27,45 @@ with st.spinner("Loading data..."):
 # ── Current tank levels ───────────────────────────────────────────────────────
 st.subheader("Current Tank Levels")
 
-TANK_COLOURS = {"1": "#083045", "2": "#B19045"}
+total_vol = sum(float(t["Volume"]) for t in tanks)
+total_cap = sum(float(t["Capacity"]) for t in tanks)
+total_pct = (total_vol / total_cap * 100) if total_cap > 0 else 0
 
-cols = st.columns(len(tanks))
-for col, tank in zip(cols, tanks):
-    vol = float(tank["Volume"])
-    pct = float(tank["Volume Percent"])
-    cap = float(tank["Capacity"])
-    status = tank["Status"]
-    name = tank["Description"]
-    updated = tank["Last Updated"]
+if total_pct < 20:
+    colour = "#e74c3c"
+elif total_pct < 40:
+    colour = "#f39c12"
+else:
+    colour = "#27ae60"
 
-    if pct < 20:
-        colour = "#e74c3c"  # red
-    elif pct < 40:
-        colour = "#f39c12"  # amber
-    else:
-        colour = "#27ae60"  # green
-
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number+delta",
-        value=vol,
-        number={"suffix": " L", "valueformat": ",.0f"},
-        delta={"reference": cap, "valueformat": ",.0f", "suffix": " L"},
-        title={"text": name, "font": {"size": 14}},
-        gauge={
-            "axis": {"range": [0, cap], "tickformat": ",.0f"},
-            "bar": {"color": colour},
-            "steps": [
-                {"range": [0, cap * 0.2], "color": "#fadbd8"},
-                {"range": [cap * 0.2, cap * 0.4], "color": "#fdebd0"},
-                {"range": [cap * 0.4, cap], "color": "#d5f5e3"},
-            ],
-            "threshold": {
-                "line": {"color": "red", "width": 2},
-                "thickness": 0.75,
-                "value": cap * 0.2,
-            },
+fig = go.Figure(go.Indicator(
+    mode="gauge+number+delta",
+    value=total_vol,
+    number={"suffix": " L", "valueformat": ",.0f"},
+    delta={"reference": total_cap, "valueformat": ",.0f", "suffix": " L"},
+    title={"text": "Combined Tank Level", "font": {"size": 14}},
+    gauge={
+        "axis": {"range": [0, total_cap], "tickformat": ",.0f"},
+        "bar": {"color": colour},
+        "steps": [
+            {"range": [0, total_cap * 0.2], "color": "#fadbd8"},
+            {"range": [total_cap * 0.2, total_cap * 0.4], "color": "#fdebd0"},
+            {"range": [total_cap * 0.4, total_cap], "color": "#d5f5e3"},
+        ],
+        "threshold": {
+            "line": {"color": "red", "width": 2},
+            "thickness": 0.75,
+            "value": total_cap * 0.2,
         },
-    ))
-    fig.update_layout(height=280, margin=dict(t=40, b=10, l=20, r=20))
+    },
+))
+fig.update_layout(height=280, margin=dict(t=40, b=10, l=20, r=20))
 
-    with col:
-        st.plotly_chart(fig, use_container_width=True)
-        st.metric("Volume", f"{vol:,.0f} L", f"{pct:.1f}% full")
-        st.caption(f"Status: **{status}** | Updated: {updated}")
+col_gauge, col_spacer = st.columns([1, 2])
+with col_gauge:
+    st.plotly_chart(fig, use_container_width=True)
+    st.metric("Total Volume", f"{total_vol:,.0f} L", f"{total_pct:.1f}% full")
+    st.caption(f"Capacity: {total_cap:,.0f} L across {len(tanks)} tanks")
 
 st.divider()
 
@@ -112,7 +106,7 @@ def calc_daily_consumption(dips):
 daily_df = calc_daily_consumption(dips)
 
 # ── Daily usage ───────────────────────────────────────────────────────────────
-st.subheader("Daily Usage — Current Month (per Tank)")
+st.subheader("Daily Usage — Current Month (Tank 1)")
 
 if daily_df.empty:
     st.info("No dip data this month yet.")
@@ -120,39 +114,33 @@ else:
     daily_df["Date"] = pd.to_datetime(daily_df["Date"])
     daily_df["Date_str"] = daily_df["Date"].dt.strftime("%a %d %b")
 
-    tank_names = sorted(daily_df["Tank"].unique())
+    tank1_daily = daily_df[daily_df["Tank"] == "Tank 1"].sort_values("Date")
 
-    chart_cols = st.columns(len(tank_names))
-    for chart_col, tank_name in zip(chart_cols, tank_names):
-        t_df = daily_df[daily_df["Tank"] == tank_name].sort_values("Date")
-        key = tank_name.strip()[-1] if tank_name.strip()[-1].isdigit() else ""
-        colour = TANK_COLOURS.get(key, "#083045")
+    combined_df = daily_df.groupby(["Date", "Date_str"], as_index=False)["Consumed (L)"].sum().sort_values("Date")
 
-        fig_t = go.Figure(go.Bar(
-            x=t_df["Date_str"],
-            y=t_df["Consumed (L)"],
-            marker_color=colour,
-            text=t_df["Consumed (L)"].apply(lambda v: f"{v:,.0f} L"),
-            textposition="outside",
-        ))
-        fig_t.update_layout(
-            title={"text": tank_name, "font": {"color": colour}},
-            yaxis_title="Litres",
-            height=360,
-            margin=dict(t=40, b=20, l=20, r=20),
-            yaxis={"tickformat": ",.0f"},
-            showlegend=False,
-        )
+    fig_t = go.Figure(go.Bar(
+        x=tank1_daily["Date_str"],
+        y=tank1_daily["Consumed (L)"],
+        marker_color="#083045",
+        text=tank1_daily["Consumed (L)"].apply(lambda v: f"{v:,.0f} L"),
+        textposition="outside",
+    ))
+    fig_t.update_layout(
+        yaxis_title="Litres",
+        height=360,
+        margin=dict(t=40, b=20, l=20, r=20),
+        yaxis={"tickformat": ",.0f"},
+        showlegend=False,
+    )
 
-        t_data = t_df["Consumed (L)"]
-        avg = t_data[t_data > 0].mean() if (t_data > 0).any() else 0
-        total = t_data.sum()
+    tank1_data = tank1_daily["Consumed (L)"]
+    avg = tank1_data[tank1_data > 0].mean() if (tank1_data > 0).any() else 0
+    total = tank1_data.sum()
 
-        with chart_col:
-            st.plotly_chart(fig_t, use_container_width=True)
-            c1, c2 = st.columns(2)
-            c1.metric("Avg Daily", f"{avg:,.0f} L")
-            c2.metric("Month Total", f"{total:,.0f} L")
+    st.plotly_chart(fig_t, use_container_width=True)
+    c1, c2 = st.columns(2)
+    c1.metric("Avg Daily", f"{avg:,.0f} L")
+    c2.metric("Month Total", f"{total:,.0f} L")
 
 st.divider()
 
@@ -169,67 +157,39 @@ else:
     sunday = today + timedelta(days=days_to_sunday)
     days_remaining = days_to_sunday
 
-    # Average daily consumption per tank (only days with actual consumption)
-    tank_avgs = {}
-    for tank_name in tank_names:
-        t_data = daily_df[daily_df["Tank"] == tank_name]["Consumed (L)"]
-        tank_avgs[tank_name] = t_data[t_data > 0].mean() if (t_data > 0).any() else 0
+    # Average daily combined consumption (only days with actual consumption)
+    combined_data = combined_df["Consumed (L)"]
+    avg_combined = combined_data[combined_data > 0].mean() if (combined_data > 0).any() else 0
 
-    forecast_rows = []
-    for tank in tanks:
-        name = tank["Description"]
-        vol = float(tank["Volume"])
-        cap = float(tank["Capacity"])
-        pct_now = float(tank["Volume Percent"])
+    projected = max(total_vol - avg_combined * days_remaining, 0)
+    proj_pct = (projected / total_cap * 100) if total_cap > 0 else 0
+    days_until_empty = total_vol / avg_combined if avg_combined > 0 else float("inf")
 
-        tank_num = tank_names[tanks.index(tank) % len(tank_names)]
+    forecast_df = pd.DataFrame([{
+        "Current (L)": f"{total_vol:,.0f}",
+        "Current %": f"{total_pct:.1f}%",
+        "Avg Daily Usage (L)": f"{avg_combined:,.0f}",
+        "Forecast EOW (L)": f"{projected:,.0f}",
+        "Forecast EOW %": f"{proj_pct:.1f}%",
+        "Days until empty": f"{days_until_empty:.1f}" if days_until_empty != float("inf") else "N/A",
+    }])
 
-        avg = tank_avgs.get(tank_num, 0)
-        projected = max(vol - avg * days_remaining, 0)
-        proj_pct = (projected / cap) * 100
-        days_until_empty = vol / avg if avg > 0 else float("inf")
-
-        forecast_rows.append({
-            "Tank": name,
-            "Current (L)": f"{vol:,.0f}",
-            "Current %": f"{pct_now:.1f}%",
-            "Avg Daily Usage (L)": f"{avg:,.0f}",
-            "Forecast EOW (L)": f"{projected:,.0f}",
-            "Forecast EOW %": f"{proj_pct:.1f}%",
-            "Days until empty": f"{days_until_empty:.1f}" if days_until_empty != float("inf") else "N/A",
-            "_proj_pct": proj_pct,
-            "_tank_num": tank_num,
-        })
-
-    forecast_df = pd.DataFrame(forecast_rows)
-
-    def colour_row(row):
-        # _tank_num is e.g. "Tank 1" — extract the digit to look up TANK_COLOURS
-        key = row["_tank_num"].strip()[-1] if row["_tank_num"].strip()[-1].isdigit() else ""
-        base = TANK_COLOURS.get(key, "")
-        return [f"background-color: {base}"] * len(row) if base else [""] * len(row)
-
-    st.dataframe(
-        forecast_df.style.apply(colour_row, axis=1).hide(subset=["_proj_pct", "_tank_num"], axis="columns"),
-        use_container_width=True,
-        hide_index=True,
-    )
+    st.dataframe(forecast_df, use_container_width=True, hide_index=True)
 
     st.caption(
-        f"Forecast based on per-tank avg daily consumption (days with usage only). "
+        f"Forecast based on combined avg daily consumption (days with usage only). "
         f"End of week = Sunday **{sunday.strftime('%d %b %Y')}** ({days_remaining} day(s) remaining)."
     )
 
-    for row in forecast_rows:
-        if row["_proj_pct"] < 20:
-            st.warning(f"⚠️ {row['Tank']} projected to be below 20% by end of week ({row['Forecast EOW %']}). Consider ordering fuel.")
-        elif row["_proj_pct"] < 40:
-            st.info(f"ℹ️ {row['Tank']} projected to be at {row['Forecast EOW %']} by end of week.")
+    if proj_pct < 20:
+        st.warning(f"Combined tanks projected to be below 20% by end of week ({proj_pct:.1f}%). Consider ordering fuel.")
+    elif proj_pct < 40:
+        st.info(f"Combined tanks projected to be at {proj_pct:.1f}% by end of week.")
 
 st.divider()
 
 # ── Month-on-month comparison ─────────────────────────────────────────────────
-st.subheader("Month-on-Month Daily Usage Comparison")
+st.subheader("Month-on-Month Daily Usage Comparison (Tank 1)")
 
 prev_df = calc_daily_consumption(dips_prev)
 
@@ -246,63 +206,8 @@ else:
     prev_df["Date"] = pd.to_datetime(prev_df["Date"])
     prev_df["Day"] = prev_df["Date"].dt.day
 
-    cmp_cols = st.columns(len(tank_names) + 1)
-    for cmp_col, tank_name in zip(cmp_cols, tank_names):
-        key = tank_name.strip()[-1] if tank_name.strip()[-1].isdigit() else ""
-        colour = TANK_COLOURS.get(key, "#083045")
-
-        cur = daily_df[daily_df["Tank"] == tank_name].sort_values("Day")
-        prv = prev_df[prev_df["Tank"] == tank_name].sort_values("Day")
-
-        diff = (
-            pd.merge(
-                cur[["Day", "Consumed (L)"]].rename(columns={"Consumed (L)": "cur"}),
-                prv[["Day", "Consumed (L)"]].rename(columns={"Consumed (L)": "prv"}),
-                on="Day", how="inner",
-            ).sort_values("Day")
-        )
-        diff["delta"] = diff["cur"] - diff["prv"]
-        diff["bar_colour"] = diff["delta"].apply(lambda v: "#e74c3c" if v > 0 else "#27ae60")
-
-        avg_delta = diff["delta"].mean()
-        cur_avg = cur["Consumed (L)"][cur["Consumed (L)"] > 0].mean() if (cur["Consumed (L)"] > 0).any() else 0
-        prv_avg = prv["Consumed (L)"][prv["Consumed (L)"] > 0].mean() if (prv["Consumed (L)"] > 0).any() else 0
-
-        fig_cmp = go.Figure()
-        fig_cmp.add_trace(go.Bar(
-            name="Difference",
-            x=diff["Day"],
-            y=diff["delta"],
-            marker_color=diff["bar_colour"],
-            hovertemplate="Day %{x}<br>%{y:+,.0f} L<extra></extra>",
-        ))
-        fig_cmp.add_hline(y=0, line_color="white", line_width=1)
-        fig_cmp.update_layout(
-            title={"text": tank_name, "font": {"color": colour}},
-            xaxis={"title": "Day of Month", "dtick": 1},
-            yaxis={"title": f"Litres vs {prev_label}", "tickformat": "+,.0f"},
-            height=360,
-            margin=dict(t=40, b=20, l=20, r=20),
-            showlegend=False,
-            hovermode="x",
-        )
-
-        with cmp_col:
-            direction = "more" if avg_delta > 0 else "less"
-            colour_word = "red" if avg_delta > 0 else "green"
-            st.markdown(
-                f"**{tank_name}** — on average :{colour_word}[**{abs(avg_delta):,.0f} L/day {direction}**] "
-                f"this month than {prev_label}"
-            )
-            st.plotly_chart(fig_cmp, use_container_width=True)
-            c1, c2, c3 = st.columns(3)
-            c1.metric(f"Avg Daily ({cur_label[:3]})", f"{cur_avg:,.0f} L")
-            c2.metric(f"Avg Daily ({prev_label[:3]})", f"{prv_avg:,.0f} L")
-            c3.metric("Avg Daily Change", f"{avg_delta:+,.0f} L")
-
-    # ── Combined both tanks ───────────────────────────────────────────────────
-    cur_all = daily_df.groupby("Day")["Consumed (L)"].sum().reset_index()
-    prv_all = prev_df.groupby("Day")["Consumed (L)"].sum().reset_index()
+    cur_all = daily_df[daily_df["Tank"] == "Tank 1"].groupby("Day")["Consumed (L)"].sum().reset_index()
+    prv_all = prev_df[prev_df["Tank"] == "Tank 1"].groupby("Day")["Consumed (L)"].sum().reset_index()
 
     diff_all = (
         pd.merge(
@@ -328,7 +233,6 @@ else:
     ))
     fig_all.add_hline(y=0, line_color="white", line_width=1)
     fig_all.update_layout(
-        title={"text": "Both Tanks Combined"},
         xaxis={"title": "Day of Month", "dtick": 1},
         yaxis={"title": f"Litres vs {prev_label}", "tickformat": "+,.0f"},
         height=360,
@@ -337,15 +241,14 @@ else:
         hovermode="x",
     )
 
-    with cmp_cols[-1]:
-        direction_all = "more" if avg_delta_all > 0 else "less"
-        colour_word_all = "red" if avg_delta_all > 0 else "green"
-        st.markdown(
-            f"**Both Tanks** — on average :{colour_word_all}[**{abs(avg_delta_all):,.0f} L/day {direction_all}**] "
-            f"this month than {prev_label}"
-        )
-        st.plotly_chart(fig_all, use_container_width=True)
-        c1, c2, c3 = st.columns(3)
-        c1.metric(f"Avg Daily ({cur_label[:3]})", f"{cur_avg_all:,.0f} L")
-        c2.metric(f"Avg Daily ({prev_label[:3]})", f"{prv_avg_all:,.0f} L")
-        c3.metric("Avg Daily Change", f"{avg_delta_all:+,.0f} L")
+    direction_all = "more" if avg_delta_all > 0 else "less"
+    colour_word_all = "red" if avg_delta_all > 0 else "green"
+    st.markdown(
+        f"On average :{colour_word_all}[**{abs(avg_delta_all):,.0f} L/day {direction_all}**] "
+        f"this month than {prev_label}"
+    )
+    st.plotly_chart(fig_all, use_container_width=True)
+    c1, c2, c3 = st.columns(3)
+    c1.metric(f"Avg Daily ({cur_label[:3]})", f"{cur_avg_all:,.0f} L")
+    c2.metric(f"Avg Daily ({prev_label[:3]})", f"{prv_avg_all:,.0f} L")
+    c3.metric("Avg Daily Change", f"{avg_delta_all:+,.0f} L")
