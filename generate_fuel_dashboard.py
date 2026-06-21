@@ -319,7 +319,7 @@ def _daily_usage_html(cur_consumption):
     if not dates:
         return '<p style="color:#777;font-style:italic">No dip data this month yet.</p>', None
     items = [(d.day, v) for d, v in sorted(dates.items())]
-    chart = bar_chart_svg(items, NAVY)
+    chart = bar_chart_svg(items, GOLD)
     used = [v for _, v in items if v > 0]
     avg = sum(used) / len(used) if used else 0
     total = sum(v for _, v in items)
@@ -401,7 +401,7 @@ STYLE = """
     .header-date { font-size: 13px; color: rgba(255,255,255,.7); margin-top: 4px; }
     .divider { border: none; border-top: 2px solid #2d4a5e; margin: 28px 0; }
     .section-title { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
-    .gauges { display: flex; flex-wrap: wrap; gap: 12px; }
+    .gauges { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
     .gauge-cell { flex: 1; min-width: 160px; max-width: 280px;
       background: #11161d; border-radius: 8px; padding: 10px; }
     .gauge-meta { text-align: center; font-size: 12px; color: rgba(255,255,255,.7); margin-top: 4px; }
