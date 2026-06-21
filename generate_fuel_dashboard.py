@@ -113,6 +113,12 @@ def short_name(description):
     return desc[idx:].title() if idx >= 0 else desc
 
 
+def next_sunday(today):
+    """End of week = the coming Sunday. Returns (days_remaining, sunday_date)."""
+    days = (6 - today.weekday()) % 7 or 7
+    return days, today + timedelta(days=days)
+
+
 # ── SVG: gauge ────────────────────────────────────────────────────────────────
 #
 # 240° arc, start 150° (lower-left) sweeping CW to 30° (lower-right) through the
@@ -266,13 +272,21 @@ def _gauges_html(tanks):
         cells += (f'<div class="gauge-cell">{gauge_svg(short_name(t["Description"]), vol, cap, pct)}'
                   f'<div class="gauge-meta">Status: <b>{_html.escape(str(t["Status"]))}</b><br>'
                   f'Updated: {_html.escape(str(t["Last Updated"]))}</div></div>')
+
+    # Combined total of all tanks
+    total_vol = sum(float(t["Volume"]) for t in tanks)
+    total_cap = sum(float(t["Capacity"]) for t in tanks)
+    total_pct = (total_vol / total_cap * 100) if total_cap else 0
+    cells += (f'<div class="gauge-cell">{gauge_svg("Total", total_vol, total_cap, total_pct)}'
+              f'<div class="gauge-meta">Combined of {len(tanks)} tanks<br>'
+              f'Capacity: {total_cap:,.0f} L</div></div>')
+
     return f'<div class="gauges">{cells}</div>'
 
 
 def _forecast_html(tanks, cur_consumption):
     today = datetime.now(AWST).date()
-    days_to_sunday = (6 - today.weekday()) % 7 or 7
-    sunday = today + timedelta(days=days_to_sunday)
+    days_to_sunday, sunday = next_sunday(today)
 
     rows, warnings = "", []
     for i, t in enumerate(tanks):
@@ -399,6 +413,7 @@ STYLE = """
       letter-spacing: .1em; color: rgba(255,255,255,.6); margin-bottom: 4px; }
     .header-title { font-size: 20px; font-weight: 700; }
     .header-date { font-size: 13px; color: rgba(255,255,255,.7); margin-top: 4px; }
+    .header-eow { font-size: 13px; color: #B19045; font-weight: 600; margin-top: 4px; }
     .divider { border: none; border-top: 2px solid #2d4a5e; margin: 28px 0; }
     .section-title { font-size: 17px; font-weight: 700; margin-bottom: 12px; }
     .gauges { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
@@ -430,6 +445,8 @@ def build_html(tanks, cur_consumption, prev_consumption):
     now = datetime.now(AWST)
     date_str = now.strftime("%A, %d %B %Y")
     gen_str = now.strftime("%d %b %Y, %I:%M %p AWST").lstrip("0")
+    _, sunday = next_sunday(now.date())
+    eow_str = sunday.strftime("%a %d %b %Y")
 
     gauges = _gauges_html(tanks)
     forecast = _forecast_html(tanks, cur_consumption)
@@ -452,6 +469,7 @@ def build_html(tanks, cur_consumption, prev_consumption):
     <div class="header-sub">New Murchison Gold &mdash; Crown Prince Operation</div>
     <div class="header-title">&#9981; Fuel Dashboard</div>
     <div class="header-date">{date_str}</div>
+    <div class="header-eow">End-of-week forecast date: <b>{eow_str}</b></div>
   </div>
 
   <div class="section-title">Current Tank Levels</div>
