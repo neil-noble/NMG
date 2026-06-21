@@ -351,20 +351,25 @@ def _mom_html(cur_consumption, prev_consumption):
     for d, v in prev.items():
         prev_by_day[d.day] += v
 
+    # Like-for-like: compare the elapsed days of this month against the SAME
+    # days of last month (e.g. Jun 1-21 vs May 1-21), so all three figures
+    # share one basis and reconcile (cur_avg - prev_avg == avg_delta).
     common = sorted(set(cur_by_day) & set(prev_by_day))
     items = [(day, cur_by_day[day] - prev_by_day[day]) for day in common]
     if not items:
         return ('<p style="color:#777;font-style:italic">No overlapping days to '
                 'compare yet.</p>')
 
-    avg_delta = sum(v for _, v in items) / len(items)
-    cur_avg = sum(cur_by_day.values()) / len(cur_by_day)
-    prev_avg = sum(prev_by_day.values()) / len(prev_by_day)
+    cur_avg = sum(cur_by_day[d] for d in common) / len(common)
+    prev_avg = sum(prev_by_day[d] for d in common) / len(common)
+    avg_delta = cur_avg - prev_avg
 
     direction = "more" if avg_delta > 0 else "less"
     colour = RED if avg_delta > 0 else GREEN
+    span = f"day {common[0]}" if len(common) == 1 else f"days {common[0]}–{common[-1]}"
     lead = (f'<p class="caption">On average <b style="color:{colour}">'
-            f'{abs(avg_delta):,.0f} L/day {direction}</b> this month than {prev_label}.</p>')
+            f'{abs(avg_delta):,.0f} L/day {direction}</b> this month than {prev_label} '
+            f'(comparing matching {span}).</p>')
     chart = diff_chart_svg(items)
     metrics = (
         '<div class="summary">'
