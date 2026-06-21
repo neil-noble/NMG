@@ -1,22 +1,39 @@
-project: NMG
-phase: setup
-status: ready
+project: NMG Fuel
+phase: deployed
+status: live
 
 client:
-  name: NMG
+  name: New Murchison Gold
+  site: Crown Prince Operation
   industry: mining
   country: Australia
-  purpose: policy_documentation
+  purpose: diesel_tank_monitoring
 
-env:
-  venv: C:\claude\NMG\venv
-  pandoc: C:\Users\nn171\AppData\Local\Pandoc\pandoc.exe
-  packages: [python-docx, pymupdf, pypandoc, markdown]
+architecture:
+  source_data: SmartFill / FMT JSON-RPC API (https://www.fmtdata.com/API/api.php)
+  secrets: [SMARTFILL_CLIENT_REF, SMARTFILL_CLIENT_SECRET, PAGES_TOKEN]  # GitHub repo secrets
+  pipeline:
+    - GitHub Actions (daily_fuel_export.yml) runs daily 21:00 UTC (07:00 AWST)
+    - daily_export_github.py writes data/*.csv history (committed to NMG repo)
+    - generate_fuel_dashboard.py fetches live data, writes docs/index.html (stdlib + inline SVG)
+    - workflow pushes index.html to neil-noble/nmg-fuel-site (PAGES_TOKEN)
+    - GitHub Pages serves https://neil-noble.github.io/nmg-fuel-site/
+    - Wix embeds via iframe at https://www.emergencyservicesaustralia.com.au/nmgcpofuel
+  repos:
+    source: https://github.com/neil-noble/NMG  (private)
+    site:   https://github.com/neil-noble/nmg-fuel-site  (public, Pages)
+
+dashboard_sections:
+  - Current tank levels (gauge per tank, RAG by % full, 20% threshold tick)
+  - Daily usage current month (Tank 1 only)
+  - End-of-week (Sunday) forecast table + low-fuel banners (all tanks)
+  - Month-on-month daily usage comparison (Tank 1 only)
+
+streamlit: retired  # dashboard.py/api.py removed; old URL no longer used
 
 context:
   active_task: null
   last_input: null
   last_output: null
 
-reference_models: []
 tasks: []
