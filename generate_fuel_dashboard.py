@@ -106,6 +106,35 @@ def calc_daily_consumption(dips):
     return result
 
 
+def calc_combined_consumption(dips):
+    """Returns {date: combined_consumed} — the daily drawdown of TOTAL fuel
+    across all tanks.
+
+    Tank 2 feeds Tank 1, so transfers between them are internal: true site
+    consumption is the fall in the *combined* volume (sum of first dips minus
+    sum of last dips across tanks). A net rise (delivery day) clamps to 0.
+    """
+    by_date_tank = defaultdict(lambda: defaultdict(list))
+    for row in dips:
+        if row.get("Record Type", "").strip().lower() != "dip":
+            continue
+        try:
+            dt = datetime.strptime(row["Date"] + " " + row["Time"], "%Y-%m-%d %H:%M:%S")
+        except (ValueError, KeyError):
+            continue
+        by_date_tank[dt.date()][str(row["Tank Number"])].append((dt, float(row["Volume"])))
+
+    result = {}
+    for date, tanks_ in by_date_tank.items():
+        first_total = last_total = 0.0
+        for readings in tanks_.values():
+            readings.sort()
+            first_total += readings[0][1]
+            last_total += readings[-1][1]
+        result[date] = max(first_total - last_total, 0)
+    return result
+
+
 def short_name(description):
     """'Fuelfix 11751 Tank 1' -> 'Tank 1'."""
     desc = (description or "").strip()
@@ -284,48 +313,54 @@ def _gauges_html(tanks):
     return f'<div class="gauges">{cells}</div>'
 
 
-def _forecast_html(tanks, cur_consumption):
+def _forecast_html(tanks, combined_consumption):
     today = datetime.now(AWST).date()
     days_to_sunday, sunday = next_sunday(today)
 
-    rows, warnings = "", []
-    for i, t in enumerate(tanks):
-        tank_num = str(i + 1)
-        vol = float(t["Volume"]); cap = float(t["Capacity"]); pct = float(t["Volume Percent"])
-        vals = [v for v in cur_consumption.get(tank_num, {}).values() if v > 0]
-        avg = sum(vals) / len(vals) if vals else 0
-        projected = max(vol - avg * days_to_sunday, 0)
-        proj_pct = (projected / cap * 100) if cap else 0
-        dte = f"{vol / avg:.1f}" if avg > 0 else "N/A"
+    # Tank 1 dispenses and is fed by Tank 2 — reorder on the COMBINED total.
+    total_vol = sum(float(t["Volume"]) for t in tanks)
+    total_cap = sum(float(t["Capacity"]) for t in tanks)
+    total_pct = (total_vol / total_cap * 100) if total_cap else 0
 
-        cls = "row-red" if proj_pct < 20 else ("row-amber" if proj_pct < 40 else "")
-        rows += (
-            f'<tr class="{cls}">'
-            f'<td class="td-name">{_html.escape(short_name(t["Description"]))}</td>'
-            f'<td>{vol:,.0f}</td><td>{pct:.1f}%</td>'
-            f'<td>{avg:,.0f}</td><td>{projected:,.0f}</td><td>{proj_pct:.1f}%</td>'
-            f'<td>{dte}</td></tr>'
-        )
-        name = short_name(t["Description"])
-        if proj_pct < 20:
-            warnings.append(('warn', f'⚠️ {name} projected below 20% by end of week '
-                                     f'({proj_pct:.1f}%). Consider ordering fuel.'))
-        elif proj_pct < 40:
-            warnings.append(('info', f'ℹ️ {name} projected at {proj_pct:.1f}% by end of week.'))
+    vals = [v for v in combined_consumption.values() if v > 0]
+    avg = sum(vals) / len(vals) if vals else 0
+    projected = max(total_vol - avg * days_to_sunday, 0)
+    proj_pct = (projected / total_cap * 100) if total_cap else 0
+    dte = f"{total_vol / avg:.1f}" if avg > 0 else "N/A"
 
+    cls = "row-red" if proj_pct < 20 else ("row-amber" if proj_pct < 40 else "")
+    row = (
+        f'<tr class="{cls}">'
+        f'<td class="td-name">Combined (all tanks)</td>'
+        f'<td>{total_vol:,.0f}</td><td>{total_pct:.1f}%</td>'
+        f'<td>{avg:,.0f}</td><td>{projected:,.0f}</td><td>{proj_pct:.1f}%</td>'
+        f'<td>{dte}</td></tr>'
+    )
     table = (
         '<div style="overflow-x:auto"><table class="data-table"><thead><tr>'
-        '<th>Tank</th><th>Current (L)</th><th>Current %</th><th>Avg Daily (L)</th>'
+        '<th>Fuel</th><th>Current (L)</th><th>Current %</th><th>Avg Daily Use (L)</th>'
         '<th>Forecast EOW (L)</th><th>Forecast EOW %</th><th>Days to Empty</th>'
-        f'</tr></thead><tbody>{rows}</tbody></table></div>'
+        f'</tr></thead><tbody>{row}</tbody></table></div>'
     )
-    banners = "".join(
-        f'<div class="banner banner-{kind}">{_html.escape(msg)}</div>' for kind, msg in warnings
-    )
-    caption = (f'<p class="caption">Forecast uses each tank\'s average daily consumption '
-               f'(days with usage only). End of week = Sunday '
+
+    if total_pct < 20:
+        banner = ('<div class="banner banner-warn">&#9888;&#65039; Combined fuel is already below '
+                  f'20% ({total_pct:.1f}%). Order fuel now.</div>')
+    elif proj_pct < 20:
+        banner = ('<div class="banner banner-warn">&#9888;&#65039; Combined fuel projected below '
+                  f'20% by end of week ({proj_pct:.1f}%). Order fuel.</div>')
+    elif proj_pct < 40:
+        banner = ('<div class="banner banner-info">&#8505;&#65039; Combined fuel projected at '
+                  f'{proj_pct:.1f}% by end of week.</div>')
+    else:
+        banner = ('<div class="banner banner-ok">&#9989; Combined fuel projected at '
+                  f'{proj_pct:.1f}% by end of week &mdash; no order needed.</div>')
+
+    caption = (f'<p class="caption">Tank 1 dispenses fuel and is fed by Tank 2, so the reorder '
+               f'decision is based on the <b>combined</b> total. Forecast uses average daily site '
+               f'consumption (combined drawdown, days with usage only). End of week = Sunday '
                f'<b>{sunday.strftime("%d %b %Y")}</b> ({days_to_sunday} day(s) remaining).</p>')
-    return table + caption + banners
+    return table + caption + banner
 
 
 def _daily_usage_html(cur_consumption):
@@ -436,12 +471,13 @@ STYLE = """
     .banner { border-radius: 6px; padding: 10px 12px; font-size: 13px; margin-top: 8px; }
     .banner-warn { background: rgba(231,76,60,.18); border-left: 3px solid #e74c3c; }
     .banner-info { background: rgba(243,156,18,.15); border-left: 3px solid #f39c12; }
+    .banner-ok { background: rgba(39,174,96,.15); border-left: 3px solid #27ae60; }
     .footer { text-align: center; color: #555; font-size: 11px; margin-top: 28px;
       padding-bottom: 12px; line-height: 1.8; }
 """
 
 
-def build_html(tanks, cur_consumption, prev_consumption):
+def build_html(tanks, cur_consumption, prev_consumption, cur_combined):
     now = datetime.now(AWST)
     date_str = now.strftime("%A, %d %B %Y")
     gen_str = now.strftime("%d %b %Y, %I:%M %p AWST").lstrip("0")
@@ -449,7 +485,7 @@ def build_html(tanks, cur_consumption, prev_consumption):
     eow_str = sunday.strftime("%a %d %b %Y")
 
     gauges = _gauges_html(tanks)
-    forecast = _forecast_html(tanks, cur_consumption)
+    forecast = _forecast_html(tanks, cur_combined)
     usage_chart, usage_metrics = _daily_usage_html(cur_consumption)
     mom = _mom_html(cur_consumption, prev_consumption)
     cur_month = now.strftime("%B %Y")
@@ -503,11 +539,13 @@ def build_html(tanks, cur_consumption, prev_consumption):
 def main():
     print("Fetching fuel data from SmartFill...", end=" ", flush=True)
     tanks = get_tank_levels()
-    cur_consumption = calc_daily_consumption(get_dips("Current Month"))
+    cur_dips = get_dips("Current Month")
+    cur_consumption = calc_daily_consumption(cur_dips)
+    cur_combined = calc_combined_consumption(cur_dips)
     prev_consumption = calc_daily_consumption(get_dips("Previous Month"))
     print(f"done. {len(tanks)} tank(s).")
 
-    html = build_html(tanks, cur_consumption, prev_consumption)
+    html = build_html(tanks, cur_consumption, prev_consumption, cur_combined)
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         f.write(html)
